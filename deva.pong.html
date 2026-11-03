@@ -1,2 +1,555 @@
-# deva-html-code
-My HTML practice And Learning Codes 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pong: Gold Rush</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(180deg, #0f172a 0%, #111827 100%);
+      color: #f8fafc;
+      font-family: Arial, sans-serif;
+      padding: 24px 12px;
+    }
+
+    main {
+      width: min(92vw, 820px);
+      text-align: center;
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: 2rem;
+    }
+
+    .scoreboard {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 26px;
+      flex-wrap: wrap;
+      margin: 12px 0;
+      font-size: 1.1rem;
+      font-weight: bold;
+    }
+
+    .setup {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin: 18px 0 10px;
+    }
+
+    input, button {
+      padding: 10px 14px;
+      border: 0;
+      border-radius: 8px;
+      font: inherit;
+    }
+
+    input {
+      width: 190px;
+      background: #f8fafc;
+      color: #0f172a;
+    }
+
+    button {
+      background: linear-gradient(180deg, #fbbf24, #f59e0b);
+      color: #3f2a09;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    button:hover {
+      filter: brightness(1.06);
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #020817;
+      border: 2px solid #475569;
+      border-radius: 10px;
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.25);
+      touch-action: none;
+    }
+
+    .hint {
+      margin-top: 10px;
+      color: #dbeafe;
+    }
+
+    .leaderboard {
+      margin: 30px auto 0;
+      max-width: 600px;
+      padding: 18px 16px;
+      background: rgba(30, 41, 59, 0.9);
+      border: 1px solid #334155;
+      border-radius: 12px;
+      text-align: left;
+    }
+
+    .leaderboard h2 {
+      margin: 0 0 12px;
+      text-align: center;
+      color: #fde68a;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th, td {
+      padding: 10px 8px;
+      border-bottom: 1px solid #475569;
+      text-align: left;
+    }
+
+    th {
+      color: #fbbf24;
+      font-size: 0.92rem;
+    }
+
+    td:last-child, th:last-child {
+      text-align: right;
+    }
+
+    #empty-message {
+      margin: 12px 0 0;
+      color: #cbd5e1;
+      text-align: center;
+    }
+
+    @media (max-width: 520px) {
+      .scoreboard {
+        gap: 12px 18px;
+        font-size: 1rem;
+      }
+      th, td {
+        font-size: 0.85rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>🏓 Pong: Gold Rush</h1>
+
+    <div class="scoreboard" aria-live="polite">
+      <span id="player-label">You</span>: <strong id="player-score">0</strong>
+      <span>Computer: <strong id="computer-score">0</strong></span>
+      <span>🪙 Coins: <strong id="game-coins">0</strong></span>
+    </div>
+
+    <canvas id="game" width="800" height="500" aria-label="Pong game"></canvas>
+
+    <div class="setup">
+      <label for="player-name">Player name:</label>
+      <input id="player-name" type="text" maxlength="20" value="Player" />
+      <button id="start-button" type="button">Start Game</button>
+    </div>
+
+    <p class="hint">
+      Move your mouse over the game or use the ↑ and ↓ arrow keys.
+      Every time you score, a coin is added and a cheerful success sound plays.
+    </p>
+
+    <section class="leaderboard" aria-labelledby="leaderboard-title">
+      <h2 id="leaderboard-title">🏆 High Scores</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th>Player</th>
+            <th>Best Score</th>
+            <th>Total Coins</th>
+          </tr>
+        </thead>
+        <tbody id="leaderboard-body"></tbody>
+      </table>
+      <p id="empty-message">No scores yet. Be the first!</p>
+    </section>
+  </main>
+
+  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+    const playerScoreDisplay = document.getElementById("player-score");
+    const computerScoreDisplay = document.getElementById("computer-score");
+    const gameCoinsDisplay = document.getElementById("game-coins");
+    const playerLabel = document.getElementById("player-label");
+    const playerNameInput = document.getElementById("player-name");
+    const startButton = document.getElementById("start-button");
+    const leaderboardBody = document.getElementById("leaderboard-body");
+    const emptyMessage = document.getElementById("empty-message");
+
+    const paddleWidth = 12;
+    const paddleHeight = 90;
+    const ballRadius = 9;
+    const storageKey = "pongGoldRushLeaderboard";
+
+    const player = { x: 24, y: 205, score: 0 };
+    const computer = { x: canvas.width - 24 - paddleWidth, y: 205, score: 0 };
+    const ball = { x: canvas.width / 2, y: canvas.height / 2, vx: 5, vy: 3 };
+
+    const keys = new Set();
+    let running = false;
+    let gameCoins = 0;
+    let activePlayerName = "Player";
+
+    let audioContext = null;
+    let backgroundMusicStarted = false;
+    let backgroundGain = null;
+    let bgInterval = null;
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function getLeaderboard() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(storageKey) || "[]");
+        return Array.isArray(saved) ? saved : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function saveLeaderboard(entries) {
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(entries));
+      } catch {
+        // Ignore storage errors silently.
+      }
+    }
+
+    function renderLeaderboard() {
+      const entries = getLeaderboard()
+        .sort((a, b) => b.highScore - a.highScore || b.coins - a.coins)
+        .slice(0, 10);
+
+      leaderboardBody.innerHTML = "";
+      emptyMessage.hidden = entries.length > 0;
+
+      entries.forEach((entry, index) => {
+        const row = document.createElement("tr");
+
+        const rankCell = document.createElement("td");
+        rankCell.textContent = String(index + 1);
+        row.appendChild(rankCell);
+
+        const nameCell = document.createElement("td");
+        nameCell.textContent = entry.name;
+        row.appendChild(nameCell);
+
+        const scoreCell = document.createElement("td");
+        scoreCell.textContent = String(entry.highScore);
+        row.appendChild(scoreCell);
+
+        const coinsCell = document.createElement("td");
+        coinsCell.textContent = `🪙 ${entry.coins}`;
+        row.appendChild(coinsCell);
+
+        leaderboardBody.appendChild(row);
+      });
+    }
+
+    function ensureAudio() {
+      if (!audioContext && window.AudioContext) {
+        audioContext = new AudioContext();
+      }
+
+      if (audioContext && audioContext.state === "suspended") {
+        audioContext.resume();
+      }
+    }
+
+    function playBackgroundMusic() {
+      if (!audioContext || backgroundMusicStarted) return;
+
+      backgroundMusicStarted = true;
+
+      backgroundGain = audioContext.createGain();
+      backgroundGain.gain.value = 0.045;
+      backgroundGain.connect(audioContext.destination);
+
+      const notes = [261.63, 329.63, 392.0, 349.23, 293.66, 392.0];
+      let step = 0;
+
+      bgInterval = setInterval(() => {
+        const freq = notes[step % notes.length];
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+
+        osc.type = "sine";
+        osc.frequency.value = freq;
+
+        gain.gain.setValueAtTime(0.0001, audioContext.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.04, audioContext.currentTime + 0.15);
+        gain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.65);
+
+        osc.connect(gain);
+        gain.connect(backgroundGain);
+
+        osc.start();
+        osc.stop(audioContext.currentTime + 0.7);
+
+        step++;
+      }, 420);
+    }
+
+    function playSuccessSound() {
+      if (!audioContext) return;
+
+      const now = audioContext.currentTime;
+      const osc = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(660, now);
+      osc.frequency.exponentialRampToValueAtTime(980, now + 0.1);
+      osc.frequency.exponentialRampToValueAtTime(1180, now + 0.22);
+
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.10, now + 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.45);
+
+      osc.connect(gain);
+      gain.connect(audioContext.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.46);
+    }
+
+    function updateLeaderboardForCurrentPlayer() {
+      const entries = getLeaderboard();
+      let entry = entries.find(
+        item => item.name.toLowerCase() === activePlayerName.toLowerCase()
+      );
+
+      if (!entry) {
+        entry = { name: activePlayerName, highScore: 0, coins: 0 };
+        entries.push(entry);
+      }
+
+      entry.name = activePlayerName;
+      entry.highScore = Math.max(entry.highScore, player.score);
+      saveLeaderboard(entries);
+      renderLeaderboard();
+    }
+
+    function awardCoinsForPlayerScore() {
+      const entries = getLeaderboard();
+      let entry = entries.find(
+        item => item.name.toLowerCase() === activePlayerName.toLowerCase()
+      );
+
+      if (!entry) {
+        entry = { name: activePlayerName, highScore: 0, coins: 0 };
+        entries.push(entry);
+      }
+
+      // More score = more coins earned
+      // example: score 1 => 1 coin, score 5 => 2 coins, score 10 => 3 coins
+      const reward = 1 + Math.floor(player.score / 5);
+      gameCoins += reward;
+      entry.coins += reward;
+
+      entry.highScore = Math.max(entry.highScore, player.score);
+
+      gameCoinsDisplay.textContent = String(gameCoins);
+      saveLeaderboard(entries);
+      renderLeaderboard();
+    }
+
+    function resetBall(direction = 1) {
+      ball.x = canvas.width / 2;
+      ball.y = canvas.height / 2;
+      ball.vx = 5 * direction;
+      ball.vy = (Math.random() * 4 - 2) || 1;
+    }
+
+    function resetGame() {
+      player.score = 0;
+      computer.score = 0;
+      gameCoins = 0;
+
+      player.y = (canvas.height - paddleHeight) / 2;
+      computer.y = (canvas.height - paddleHeight) / 2;
+
+      playerScoreDisplay.textContent = "0";
+      computerScoreDisplay.textContent = "0";
+      gameCoinsDisplay.textContent = "0";
+
+      resetBall(1);
+    }
+
+    function movePlayerTo(y) {
+      player.y = clamp(y - paddleHeight / 2, 0, canvas.height - paddleHeight);
+    }
+
+    canvas.addEventListener("mousemove", (event) => {
+      const rect = canvas.getBoundingClientRect();
+      const scaleY = canvas.height / rect.height;
+      const mouseY = (event.clientY - rect.top) * scaleY;
+      movePlayerTo(mouseY);
+    });
+
+    canvas.addEventListener("touchmove", (event) => {
+      event.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const scaleY = canvas.height / rect.height;
+      const touchY = (event.touches[0].clientY - rect.top) * scaleY;
+      movePlayerTo(touchY);
+    }, { passive: false });
+
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+        event.preventDefault();
+        keys.add(event.key);
+      }
+    });
+
+    window.addEventListener("keyup", (event) => {
+      keys.delete(event.key);
+    });
+
+    startButton.addEventListener("click", async () => {
+      ensureAudio();
+      playBackgroundMusic();
+
+      if (running) {
+        resetGame();
+      }
+
+      activePlayerName = playerNameInput.value.trim() || "Player";
+      playerNameInput.value = activePlayerName;
+      playerLabel.textContent = activePlayerName;
+
+      running = true;
+      startButton.textContent = "Restart Game";
+      updateLeaderboardForCurrentPlayer();
+    });
+
+    function update() {
+      if (keys.has("ArrowUp")) player.y -= 7;
+      if (keys.has("ArrowDown")) player.y += 7;
+      player.y = clamp(player.y, 0, canvas.height - paddleHeight);
+
+      // Computer AI
+      const target = ball.y - paddleHeight / 2;
+      const computerSpeed = 4.2;
+      computer.y += clamp(target - computer.y, -computerSpeed, computerSpeed);
+      computer.y = clamp(computer.y, 0, canvas.height - paddleHeight);
+
+      ball.x += ball.vx;
+      ball.y += ball.vy;
+
+      // Top and bottom wall collision
+      if (ball.y - ballRadius <= 0) {
+        ball.y = ballRadius;
+        ball.vy *= -1;
+      }
+      if (ball.y + ballRadius >= canvas.height) {
+        ball.y = canvas.height - ballRadius;
+        ball.vy *= -1;
+      }
+
+      // Player paddle collision
+      if (
+        ball.vx < 0 &&
+        ball.x - ballRadius <= player.x + paddleWidth &&
+        ball.x + ballRadius >= player.x &&
+        ball.y + ballRadius >= player.y &&
+        ball.y - ballRadius <= player.y + paddleHeight
+      ) {
+        ball.x = player.x + paddleWidth + ballRadius;
+        ball.vx = Math.abs(ball.vx) * 1.04;
+        ball.vy = ((ball.y - (player.y + paddleHeight / 2)) / (paddleHeight / 2)) * 5;
+      }
+
+      // Computer paddle collision
+      if (
+        ball.vx > 0 &&
+        ball.x + ballRadius >= computer.x &&
+        ball.x - ballRadius <= computer.x + paddleWidth &&
+        ball.y + ballRadius >= computer.y &&
+        ball.y - ballRadius <= computer.y + paddleHeight
+      ) {
+        ball.x = computer.x - ballRadius;
+        ball.vx = -Math.abs(ball.vx) * 1.04;
+        ball.vy = ((ball.y - (computer.y + paddleHeight / 2)) / (paddleHeight / 2)) * 5;
+      }
+
+      // Score update
+      if (ball.x + ballRadius < 0) {
+        computer.score++;
+        computerScoreDisplay.textContent = computer.score;
+        playSuccessSound(); // optional success chime for opponent too
+        resetBall(1);
+      } else if (ball.x - ballRadius > canvas.width) {
+        player.score++;
+        playerScoreDisplay.textContent = player.score;
+
+        // success sound + coins when player's score increases
+        awardCoinsForPlayerScore();
+        playSuccessSound();
+
+        resetBall(-1);
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Center divider
+      ctx.strokeStyle = "#475569";
+      ctx.setLineDash([10, 10]);
+      ctx.beginPath();
+      ctx.moveTo(canvas.width / 2, 0);
+      ctx.lineTo(canvas.width / 2, canvas.height);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Paddles
+      ctx.fillStyle = "#f8fafc";
+      ctx.fillRect(player.x, player.y, paddleWidth, paddleHeight);
+      ctx.fillRect(computer.x, computer.y, paddleWidth, paddleHeight);
+
+      // Ball
+      ctx.beginPath();
+      ctx.arc(ball.x, ball.y, ballRadius, 0, Math.PI * 2);
+      ctx.fill();
+
+      if (!running) {
+        ctx.fillStyle = "rgba(2, 8, 23, 0.75)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#f8fafc";
+        ctx.font = "bold 28px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText("Press Start Game to play", canvas.width / 2, canvas.height / 2);
+      }
+    }
+
+    function gameLoop() {
+      if (running) update();
+      draw();
+      requestAnimationFrame(gameLoop);
+    }
+
+    resetBall();
+    renderLeaderboard();
+    gameLoop();
+  </script>
+</body>
+</html>
